@@ -9,13 +9,15 @@ const validator =require('validator');
 const session = require('express-session');
 const mongodbSession = require('connect-mongodb-session')(session);
 const { isAuth } = require('./middlewares/authMiddleware');
-
+const sessionModel = require('./models/sessionModel');
+const todoModel = require('./models/todoModel');
+const { validateToDo } = require('./utiles/todoUtile');
 //constants
 const app = express();
 const PORT = process.env.PORT;
 const store = new mongodbSession({
     uri:process.env.MONGO_URI,
-    collection:'Sessions'
+    collection:'sessions'
 })
 
 //Mongodb connection
@@ -171,8 +173,77 @@ app.post('/login',async(req,res)=>{
 
 //dashboard route
 app.get('/dashboard',isAuth,(req,res)=>{
-    return res.send('dashboard');
+    return res.render('dashboard');
 });
+
+//logout route
+app.post('/logout',isAuth,async(req,res)=>{
+    try{
+        req.session.destroy();
+        return res.redirect('/login');
+    }
+    catch(err){
+        return res.send({
+            status:500,
+            message:"Database error",
+            error:err
+        })
+    }
+})
+
+//log-out-from all devices route
+app.post('/logout_from_all_devices',isAuth,async(req,res)=>{
+    const username = req.session.user.username;
+
+    //delete the sessions created by the same username in different devices
+    try{
+        const deleteSessionCount = await sessionModel.deleteMany({"session.user.username":username,});
+        console.log(deleteSessionCount);
+        return res.redirect('/login');
+    }
+    catch(err){
+        return res.send("Logout Unsuccessfull")
+    }
+});
+
+//create todo route
+app.post('/create-item',isAuth,async(req,res)=>{
+
+    //username and todo from req
+    const todoText = req.body.todo;
+    const username = req.session.user.username;
+
+    //Todo validation 
+    try{
+        const validate = await validateToDo(todoText);
+    }catch(err){
+        return res.send({
+            status:400,
+            error:err
+        })
+    }
+    //save todo in db
+    const todoObj = new todoModel({
+        todo:todoText,
+        username:username
+    });
+
+    try{
+       const todoDb = await todoObj.save();
+        return res.send({
+            status:201,
+            message:"Todo created successfully",
+           data:todoDb
+        })
+    }
+    catch(err){ 
+        return res.send({
+            status:500,
+            message:"Database error",
+            error:err
+        })
+    }
+})
 
 app.listen(PORT, () => {
     console.log(clc.yellow(`Server is running on port ${PORT}`));
