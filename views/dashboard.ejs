@@ -19,7 +19,9 @@
           </form>
         </div>
 
-        
+        <ul id="item_list" class=""list-group pb-5>
+
+        </ul>
     
 
       <form action='/logout' method="POST">
@@ -31,5 +33,11 @@
       </form>
 
       </div>
+      <script>
+        var todos = '<%- JSON.stringify(todos) %>'; // test is now a valid js object
+      </script>
+      <script src="https://unpkg.com/axios@1.1.2/dist/axios.min.js"></script>
+      <script src="/browser.js">
+      </script>
     </body>
     </html>

@@ -39,6 +39,7 @@ app.use(session({
     saveUninitialized:false,
     store:store
 }))
+app.use(express.static("public"));
 
 //Routes
 app.get('/', (req, res) => {
@@ -172,8 +173,20 @@ app.post('/login',async(req,res)=>{
 });
 
 //dashboard route
-app.get('/dashboard',isAuth,(req,res)=>{
-    return res.render('dashboard');
+app.get('/dashboard',isAuth,async(req,res)=>{
+    const username = req.session.user.username;
+  try {
+    const todos = await todoModel.find({ username: username });
+    console.log(todos);
+    // return res.send({
+    //   status:200,
+    //   message:"Read success",
+    //   data: todos
+    // })
+    return res.render("dashboard", { todos: todos });
+  } catch (error) {
+    return res.send(error);
+  }
 });
 
 //logout route
@@ -244,6 +257,109 @@ app.post('/create-item',isAuth,async(req,res)=>{
         })
     }
 })
+
+//edit todo Route
+app.post('/edit-item',isAuth,async(req,res)=>{
+    //todoId and updated todo text from req
+    const{id,newData} = req.body;
+
+    //data validation
+    if(!id || !newData){
+        return res.send({
+            status:400,
+            message:"Please enter todoId and NewtodoText"
+        });
+    }
+
+    if(newData.length < 3 || newData> 50){
+        return res.send({
+            status:400,
+            message:"Todo text should be 3-50 characters"
+        });
+    }
+  //find the todo in db
+  try{
+     const tododb = await todoModel.findById({_id:id});
+     if(!tododb){
+        return res.send({
+            status:400,
+            message:"Todo not found"
+        });
+     }
+
+     //check ownership
+     if(tododb.username !== req.session.user.username){
+        return res.send({
+            status:401,
+            message:"You are not authorized to edit this todo"
+        });
+     }
+     //update the todo
+     const PrevTodo = await todoModel.findOneAndUpdate({_id:id},{todo:newData})
+     return res.send({
+        status:200,
+        message:"Todo updated successfully",
+        data:PrevTodo
+     })
+    }
+    catch(err){
+        return res.send({
+            status:500,
+            message:"Database error",
+            error:err
+        })
+    }
+})
+
+//delete todo route
+app.post("/delete-item", isAuth, async (req, res) => {
+    //todoId
+    const { id } = req.body;
+  
+    //data validation
+  
+    if (!id) {
+      return res.send({
+        status: 400,
+        message: "Missing credentials",
+      });
+    }
+  
+    //find the todo from db
+  
+    try {
+      const todoDb = await todoModel.findOne({ _id: id });
+      if (!todoDb) {
+        return res.send({
+          status: 400,
+          message: "Todo not found",
+        });
+      }
+  
+      //check ownership
+      if (todoDb.username !== req.session.user.username) {
+        return res.send({
+          status: 401,
+          message: "Not allowed to delete, authorization failed",
+        });
+      }
+  
+      //update the todo in DB
+      const todoPrev = await todoModel.findOneAndDelete({ _id: id });
+  
+      return res.send({
+        status: 200,
+        message: "Todo deleted successfully",
+        data: todoPrev,
+      });
+    } catch (error) {
+      return res.send({
+        status: 500,
+        message: "Database error",
+        error: error,
+      });
+    }
+  });
 
 app.listen(PORT, () => {
     console.log(clc.yellow(`Server is running on port ${PORT}`));
