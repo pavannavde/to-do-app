@@ -1,7 +1,34 @@
-const todoArray = JSON.parse(todos);
+
+let skip=0;
 
 document.addEventListener("click", function (event) {
-  if (event.target.classList.contains("edit-me")) {
+
+ //add todo
+ if (event.target.classList.contains("add_item")) {
+  //event.preventDefault();
+  const todoText = document.getElementById("create_field").value;
+  console.log(typeof todoText);
+  if (todoText.length === 0) {
+    alert("Please enter the todo text");
+  }
+
+  axios
+    .post("/create-item", { todo: todoText })
+    .then((res) => {
+      if (res.data.status !== 201) {
+        alert(res.data.message);
+        return;
+      }
+      console.log(res.data);
+      document.getElementById("create_field").value = "";
+      return;
+    })
+    .catch((err) => {
+      console.log(err);
+    });
+}
+//edit todo
+  else if (event.target.classList.contains("edit-me")) {
     //id, newData
     const id = event.target.getAttribute("data-id");
     const newData = prompt("Enter new todo text");
@@ -24,7 +51,9 @@ document.addEventListener("click", function (event) {
         console.log(err);
         alert(err.message);
       });
-  } else if (event.target.classList.contains("delete-me")) {
+  } 
+  //delete todo
+  else if (event.target.classList.contains("delete-me")) {
     const id = event.target.getAttribute("data-id");
 
     axios
@@ -41,12 +70,29 @@ document.addEventListener("click", function (event) {
       .catch((err) => {
         console.log(err);
       });
+  } 
+  //show more
+  else if (event.target.classList.contains("show_more")) {
+    genrateTodos();
   }
 });
 
+window.onload = genrateTodos();
+
+function genrateTodos() {
+  console.log(skip);
+  axios
+    .get(`/read-item?skip=${skip}`)
+    .then((res) => {
+      console.log(res);
+      const todos = res.data.data;
+      if (todos.length === 0) {
+        alert("No more todos to show");
+      }
+
 document.getElementById("item_list").insertAdjacentHTML(
   "beforeend",
-  todoArray
+  todos
     .map((item) => {
       console.log(item);
       return `<li class="list-group-item list-group-item-action d-flex align-items-center justify-content-between">
@@ -60,5 +106,12 @@ document.getElementById("item_list").insertAdjacentHTML(
     .join("")
 );
 
+skip += todos.length;
+return;
+})
+.catch((err) => {
+console.log(err);
+});
+}
 //client(axios)<---api----->Server(express) <----> mongodb
 //cors

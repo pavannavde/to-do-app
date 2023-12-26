@@ -21,6 +21,11 @@ const userSchema = new Schema({
         required: true,
         unique: true,
     },
+    isEmailAuthenticated: {
+        type: Boolean,
+        require: true,
+        default: false,
+      },
     telephone: {
         type: String,
         required: false

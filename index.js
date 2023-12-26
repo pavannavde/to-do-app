@@ -3,14 +3,17 @@ const  mongoose = require('mongoose');
 require('dotenv').config()
 const clc = require('cli-color');
 const userModel = require('./models/userModel');
-const { cleanUpAndValidate } = require('./utiles/authUtile');
+const sessionModel = require('./models/sessionModel');
+const todoModel = require('./models/todoModel');
 const bcrypt = require('bcrypt');
 const validator =require('validator');
 const session = require('express-session');
 const mongodbSession = require('connect-mongodb-session')(session);
+const rateLimiting = require('./middlewares/rateLimting');
+const jwt = require('jsonwebtoken');
+//files
+const { cleanUpAndValidate, generateToken,sendVerificationMail } = require('./utiles/authUtile');
 const { isAuth } = require('./middlewares/authMiddleware');
-const sessionModel = require('./models/sessionModel');
-const todoModel = require('./models/todoModel');
 const { validateToDo } = require('./utiles/todoUtile');
 //constants
 const app = express();
@@ -99,17 +102,47 @@ app.post('/register',async(req,res)=>{
     //make entry in db
     
         const userdb = await userObj.save();
+        //generate Token
+        const verificationToken = generateToken(email)
+        //send verification mail
+        console.log(verificationToken)
+
+        sendVerificationMail({email,verificationToken});
         
         return res.redirect('/login');
     }
     catch(err){
+        console.log(err);
         return res.send({
             status:500,
-            message: 'Database error',
+            message: 'Database1 error',
             error:err
         });
     }
 })
+//email verification
+app.get("/verifytoken/:id",async(req,res)=>{
+    const token = req.params.id;
+    //verify token
+    jwt.verify(token,process.env.SECRET_KEY,async(err,email)=>{
+        try{
+             await userModel.findOneAndUpdate({email:email},{isEmailAuthenticated:true})
+             
+             return res.send({
+                status:200,
+                message:"Email verified ,please go to login page"
+             });
+        }
+        catch(err){
+            return res.send({
+                status:500,
+                message:"Database error",
+                error:err
+            })
+        }
+    });
+       
+});
 
 //Login Api
 app.post('/login',async(req,res)=>{
@@ -142,6 +175,13 @@ app.post('/login',async(req,res)=>{
                 message:"User not found"
             })
         }
+        //is email is not verified
+        if (!user.isEmailAuthenticated) {
+            return res.send({
+              status: 401,
+              message: "Please verify your email Id",
+            });
+          }
         //password comparision
         const isMatch = await bcrypt.compare(password,user.password);
 
@@ -220,7 +260,7 @@ app.post('/logout_from_all_devices',isAuth,async(req,res)=>{
 });
 
 //create todo route
-app.post('/create-item',isAuth,async(req,res)=>{
+app.post('/create-item',isAuth,rateLimiting,async(req,res)=>{
 
     //username and todo from req
     const todoText = req.body.todo;
@@ -360,6 +400,40 @@ app.post("/delete-item", isAuth, async (req, res) => {
       });
     }
   });
+
+//pagination route
+app.get('/read-item',isAuth,rateLimiting,async(req,res)=>{
+    const SKIP = req.query.skip || 0;
+    const LIMIT =process.env.LIMIT;
+    const username = req.session.user.username;
+    try{
+        const tododb = await todoModel.aggregate([
+            //pagination  and match
+            {
+                $match : {username:username}
+            },
+            { 
+                $facet:{
+                    data:[{ $skip : parseInt(SKIP)},{ $limit : parseInt(LIMIT) }]
+                }
+            },
+        ]);
+
+        return res.send({
+            status:200,
+            message:"Read success",
+            data:tododb[0].data
+        });
+    }
+    catch(err){ 
+        return res.send({
+            status:500,
+            message:"Database error",
+            error:err
+        })
+    }
+
+})
 
 app.listen(PORT, () => {
     console.log(clc.yellow(`Server is running on port ${PORT}`));
